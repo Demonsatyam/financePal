@@ -4,14 +4,16 @@ import sys
 from contextlib import asynccontextmanager
 
 # --- Database Imports ---
-# Import the central Base and engine objects
-from database.db import Base, engine
-# This import is CRITICAL. It ensures that Python loads the models.py file,
-# which causes the User, Policy, etc. classes to be registered with the Base metadata.
+# Import the central Base, AdminBase, and engine objects
+from database.db import Base, AdminBase, engine
+# This import is CRITICAL. It ensures that Python loads the models files,
+# which causes all model classes to be registered with their respective Base metadata.
 from database import models
+from database.admin import admin_models
 
 # --- Route Imports ---
 from routes import auth, policy
+from routes import admin  # Your new admin router
 
 # Configure logging to print to the console
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
@@ -20,13 +22,16 @@ logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 async def lifespan(app: FastAPI):
     """
     This function manages application startup and shutdown events.
+    It's the recommended way to handle setup/teardown logic.
     """
     logging.info("Application startup...")
     logging.info("Connecting to the database and creating tables if they don't exist...")
     
-    # Create all tables stored in the Base.metadata.
-    # The 'checkfirst=True' argument prevents errors if the tables already exist.
-    Base.metadata.create_all(bind=engine, checkfirst=True)
+    # Create all tables stored in the Base and AdminBase metadata.
+    # The 'checkfirst=True' would also work, but since we have a solid reset
+    # script, create_all is fine.
+    Base.metadata.create_all(bind=engine)
+    AdminBase.metadata.create_all(bind=engine)
     
     logging.info("Database tables check/creation complete.")
     yield
@@ -36,10 +41,18 @@ async def lifespan(app: FastAPI):
 # Create the FastAPI app instance and attach the lifespan manager
 app = FastAPI(lifespan=lifespan)
 
-# Include the API routers from your routes files
-app.include_router(auth.router)
-app.include_router(policy.router)
+# --- Include API Routers ---
+# This makes the endpoints from your route files available in the app.
+# Using a prefix helps organize URLs (e.g., /admin/policies).
+# Using tags groups the endpoints neatly in the API docs.
 
-@app.get("/")
+app.include_router(auth.router, prefix="/user", tags=["User Authentication"])
+app.include_router(policy.router, prefix="/user", tags=["User Policies"])
+app.include_router(admin.router, prefix="/admin", tags=["Admin Management"])
+
+@app.get("/", tags=["Root"])
 def read_root():
+    """
+    A simple endpoint to confirm the API is running.
+    """
     return {"status": "FinancePal API is running"}

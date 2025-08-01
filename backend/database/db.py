@@ -1,21 +1,27 @@
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker, declarative_base
-import sys, os
+import sys
+import os
+
+# ... (the top part of your file remains the same) ...
+
+# 📦 Ensure parent directory is on sys.path for imports
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/..")
 
-
+# 🔗 DB connection
 DATABASE_URL = "postgresql://postgres:8762@localhost:5432/insurance_db"
-
-# The engine is the connection source for the database
 engine = create_engine(DATABASE_URL)
 
-# SessionLocal is a factory for creating new database session objects
+# 🧠 Session factory
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-# Base is the declarative base class that our models will inherit from
+# 🧱 User-side model base
 Base = declarative_base()
 
-# This dependency function will be imported by your API routes
+# 📦 Admin-side model base
+from database.admin.base import AdminBase  # Separate base for admin tables
+
+# 🛠 Dependency for FastAPI
 def get_db():
     db = SessionLocal()
     try:
@@ -23,5 +29,25 @@ def get_db():
     finally:
         db.close()
 
+# 🚀 Reset both user & admin schema (dev only)
 if __name__ == "__main__":
-    import database.models  # Do not alias it
+    # Import all models to ensure they are registered with their respective bases
+    import database.models
+    import database.admin.admin_models
+
+    print("⚠️  Dropping and recreating the public schema...")
+
+    # ✅ EDITED: Use raw SQL with CASCADE for a foolproof reset.
+    # This directly tells PostgreSQL to drop all tables, views, etc.
+    # in the public schema, ignoring dependency order.
+    with engine.connect() as connection:
+        connection.execute(text("DROP SCHEMA public CASCADE;"))
+        connection.execute(text("CREATE SCHEMA public;"))
+        connection.commit() # Make sure the changes are committed
+
+    print("✅ Creating all tables from current models...")
+    # Now that the database is empty, create_all will succeed.
+    Base.metadata.create_all(bind=engine)
+    AdminBase.metadata.create_all(bind=engine)
+
+    print("🎉 Database reset complete.")
