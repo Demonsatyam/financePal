@@ -2,14 +2,19 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker, declarative_base
 import sys
 import os
-
-# ... (the top part of your file remains the same) ...
+from dotenv import load_dotenv
 
 # 📦 Ensure parent directory is on sys.path for imports
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/..")
 
-# 🔗 DB connection
-DATABASE_URL = "postgresql://postgres:8762@localhost:5432/insurance_db"
+# 🌱 Load environment variables
+load_dotenv()
+
+# 🔗 DB connection (from .env)
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    raise ValueError("DATABASE_URL is not set in your .env file")
+
 engine = create_engine(DATABASE_URL)
 
 # 🧠 Session factory
@@ -37,16 +42,12 @@ if __name__ == "__main__":
 
     print("⚠️  Dropping and recreating the public schema...")
 
-    # ✅ EDITED: Use raw SQL with CASCADE for a foolproof reset.
-    # This directly tells PostgreSQL to drop all tables, views, etc.
-    # in the public schema, ignoring dependency order.
     with engine.connect() as connection:
         connection.execute(text("DROP SCHEMA public CASCADE;"))
         connection.execute(text("CREATE SCHEMA public;"))
-        connection.commit() # Make sure the changes are committed
+        connection.commit()
 
     print("✅ Creating all tables from current models...")
-    # Now that the database is empty, create_all will succeed.
     Base.metadata.create_all(bind=engine)
     AdminBase.metadata.create_all(bind=engine)
 
